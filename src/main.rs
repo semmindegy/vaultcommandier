@@ -1,12 +1,11 @@
 use reqwest::Client;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use base64::{engine::general_purpose, Engine as _};
-use argon2::{self, Config as Argon2Config};
+use argon2::Argon2;
 use pbkdf2::pbkdf2_hmac;
 use sha2::{Sha256, Digest};
 use aes::Aes256;
-use block_modes::{BlockMode, Cbc};
-use block_modes::block_padding::Pkcs7;
+use block_modes::{BlockMode, block_padding::Pkcs7 as Pkcs7, Cbc};
 use hmac::Hmac;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -24,7 +23,7 @@ struct PreloginResponse {
 #[derive(Debug, Deserialize)]
 struct LoginResponse {
     access_token: String,
-    Key: String, // Base64-encoded, AES-encrypted user key
+    Key: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -59,6 +58,7 @@ fn derive_master_key(
     let salt = prelogin.kdf_salt.as_bytes();
     match prelogin.kdf {
         0 => {
+            // PBKDF2
             let mut derived = vec![0u8; 32];
             let iterations = prelogin.kdf_iterations.unwrap_or(600_000);
             let secret = format!("{}{}", email.to_lowercase(), password);
@@ -66,19 +66,19 @@ fn derive_master_key(
             derived
         }
         2 => {
+            // Argon2id
             let memory = prelogin.kdf_memory.unwrap_or(64);
             let iterations = prelogin.kdf_iterations.unwrap_or(3);
             let parallelism = prelogin.kdf_parallelism.unwrap_or(4);
-            let config = Argon2Config {
-                variant: argon2::Variant::Argon2id,
-                version: argon2::Version::Version13,
-                mem_cost: memory * 1024,
-                time_cost: iterations,
-                lanes: parallelism,
-                ..Default::default()
-            };
             let secret = format!("{}{}", email.to_lowercase(), password);
-            argon2::hash_raw(secret.as_bytes(), salt, &config).unwrap()
+            let mut derived = vec![0u8; 32];
+            let argon2 = Argon2::new(
+                argon2::Algorithm::Argon2id,
+                argon2::Version::V0x13,
+                argon2::Params::new(memory * 1024, iterations, parallelism, None).unwrap(),
+            );
+            argon2.hash_password_into(secret.as_bytes(), salt, &mut derived).unwrap();
+            derived
         }
         _ => panic!("Unsupported KDF"),
     }
