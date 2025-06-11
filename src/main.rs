@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use reqwest::Client;
 use serde::Deserialize;
 use base64::{engine::general_purpose, Engine as _};
@@ -5,11 +7,12 @@ use argon2::Argon2;
 use pbkdf2::pbkdf2_hmac;
 use sha2::{Sha256, Digest};
 use aes::Aes256;
-use block_modes::{BlockMode, block_padding::Pkcs7 as Pkcs7, Cbc};
+use cbc::Decryptor;
+use cipher::{KeyIvInit, block_padding::Pkcs7, BlockDecryptMut};
 use hmac::Hmac;
 
 type HmacSha256 = Hmac<Sha256>;
-type Aes256Cbc = Cbc<Aes256, Pkcs7>;
+// type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 
 #[derive(Debug, Deserialize)]
 struct PreloginResponse {
@@ -87,10 +90,15 @@ fn derive_master_key(
 fn decrypt_aes256_cbc(enc: &str, key: &[u8]) -> Vec<u8> {
     let enc = enc.strip_prefix("2.").unwrap();
     let mut parts = enc.split('|');
-    let iv = base64_decode(parts.next().unwrap());
+    let iv: &[u8;16] = base64_decode(parts.next().unwrap());
     let ct = base64_decode(parts.next().unwrap());
-    let cipher = Aes256Cbc::new_from_slices(key, &iv).unwrap();
-    cipher.decrypt_vec(&ct).unwrap()
+    // let cipher = Aes256Cbc::new_from_slices(key, &iv).unwrap();
+
+    let mut buf = enc.clone().as_bytes();
+    let mut decryptor = Decryptor::<Aes256>::new(key.into(), &iv.into());
+
+    decryptor.decrypt_padded_mut(&mut buf).unwrap().into()
+    // cipher.decrypt_vec(&ct).unwrap()
 }
 
 #[tokio::main]
