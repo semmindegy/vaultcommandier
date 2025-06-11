@@ -1,0 +1,18 @@
+[package]
+name = "vaultcommandier"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+base64 = "0.21"
+argon2 = "0.5"
+pbkdf2 = "0.12"
+sha2 = "0.10"
+aes = "0.8"
+block-modes = "0.9"
+hmac = "0.12"
+hex = "0.4"
